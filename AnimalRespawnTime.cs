@@ -2,72 +2,22 @@
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
-using MelonLoader.Utils;
-using Newtonsoft.Json;
+using ModSettings;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 
 namespace AnimalRespawnTimeMod
 {
     public class AnimalRespawnTimeModMain : MelonMod
     {
-        public static Dictionary<string, float> RespawnConfig =
-            new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-
         public override void OnApplicationStart()
         {
             MelonLogger.Msg("AnimalRespawnTimeTweaks initializing...");
-            LoadConfig();
+
+            AnimalRespawnTimeSettings.OnLoad();
+
             MelonLogger.Msg("AnimalRespawnTimeTweaks ready");
-        }
-
-        private void LoadConfig()
-        {
-            try
-            {
-                string cfgDir = Path.Combine(MelonEnvironment.GameRootDirectory, "Mods");
-                Directory.CreateDirectory(cfgDir);
-                string cfgPath = Path.Combine(cfgDir, "AnimalRespawnTimeTweaks.json");
-
-                if (!File.Exists(cfgPath))
-                {
-                    Dictionary<string, float> example =
-                        new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
-                        {
-                            { "WILDLIFE_Wolf", 768f },
-                            { "WILDLIFE_Bear", 1920f },
-                            { "WILDLIFE_Rabbit", 960f },
-                            { "WILDLIFE_Doe", 768f },
-                            { "WILDLIFE_Stag", 768f },
-                            { "WILDLIFE_Moose", 2880f },
-                            { "WILDLIFE_Ptarmigan", 640f },
-                            { "WILDLIFE_Wolf_grey", 768f },
-                            { "WILDLIFE_Wolf_Starving", 768f }
-                        };
-
-                    File.WriteAllText(cfgPath,
-                        JsonConvert.SerializeObject(example, Formatting.Indented));
-
-                    RespawnConfig = example;
-                    MelonLogger.Msg($"[Config] Created example config at {cfgPath}");
-                    return;
-                }
-
-                string text = File.ReadAllText(cfgPath);
-                Dictionary<string, float> loaded =
-                    JsonConvert.DeserializeObject<Dictionary<string, float>>(text);
-
-                RespawnConfig = loaded ??
-                    new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-
-                MelonLogger.Msg($"[Config] Loaded {RespawnConfig.Count} entries");
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"[Config] Failed to load config: {ex}");
-            }
         }
 
         public static bool TryGetConfiguredHours(string prefabName, out float hours)
@@ -85,7 +35,29 @@ namespace AnimalRespawnTimeMod
                 ).Trim();
             }
 
-            return RespawnConfig.TryGetValue(prefabName, out hours);
+            AnimalRespawnTimeSettings s = AnimalRespawnTimeSettings.Instance;
+            if (s == null)
+                return false;
+
+            float days;
+
+            switch (prefabName)
+            {
+                case "WILDLIFE_Wolf": days = s.Wolfnumber; break;
+                case "WILDLIFE_Bear": days = s.Bearnumber; break;
+                case "WILDLIFE_Rabbit": days = s.Rabbitnumber; break;
+                case "WILDLIFE_Doe": days = s.Doenumber; break;
+                case "WILDLIFE_Stag": days = s.Stagnumber; break;
+                case "WILDLIFE_Moose": days = s.Moosenumber; break;
+                case "WILDLIFE_Ptarmigan": days = s.Ptarmigannumber; break;
+                case "WILDLIFE_Wolf_grey": days = s.Wolf_greynumber; break;
+                case "WILDLIFE_Wolf_Starving": days = s.Wolf_Starvingnumber; break;
+                default:
+                    return false;
+            }
+
+            hours = days * 24f;
+            return true;
         }
     }
 
@@ -108,15 +80,21 @@ namespace AnimalRespawnTimeMod
                 return;
             }
 
-            float custom;
-            if (!AnimalRespawnTimeModMain.TryGetConfiguredHours(prefabName, out custom))
+            float customHours;
+            if (!AnimalRespawnTimeModMain.TryGetConfiguredHours(prefabName, out customHours))
                 return;
 
-            __result = custom;
 
-#if DEBUG
-            MelonLogger.Msg($"[Respawn] Override GetNumHoursBetweenRespawns {prefabName} -> {custom}h");
-#endif
+            float vanillaHours = __result;
+            float vanillaDays = vanillaHours / 24f;
+            float customDays = customHours / 24f;
+
+            MelonLogger.Msg(
+                $"[Respawn] {prefabName} vanilla={vanillaDays:0.##} days -> mod={customDays:0.##} days"
+            );
+
+
+            __result = customHours;
         }
     }
 
@@ -139,16 +117,22 @@ namespace AnimalRespawnTimeMod
                 return;
             }
 
-            float custom;
-            if (!AnimalRespawnTimeModMain.TryGetConfiguredHours(prefabName, out custom))
+            float customHours;
+            if (!AnimalRespawnTimeModMain.TryGetConfiguredHours(prefabName, out customHours))
                 return;
 
-            cooldownHours = custom;
-            __instance.m_CooldownTimerHours = custom;
-
 #if DEBUG
-            MelonLogger.Msg($"[Respawn] Override cooldown {prefabName} -> {custom}h");
+            float vanillaDays = cooldownHours / 24f;
+            float customDays = customHours / 24f;
+
+            MelonLogger.Msg(
+                $"[Respawn] cooldown {prefabName}: {vanillaDays:0.##} days -> {customDays:0.##} days"
+            );
+
 #endif
+
+            cooldownHours = customHours;
+            __instance.m_CooldownTimerHours = customHours;
         }
     }
 }

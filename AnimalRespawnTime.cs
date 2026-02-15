@@ -29,10 +29,7 @@ namespace AnimalRespawnTimeMod
 
             if (prefabName.EndsWith("(Clone)", StringComparison.OrdinalIgnoreCase))
             {
-                prefabName = prefabName.Substring(
-                    0,
-                    prefabName.Length - "(Clone)".Length
-                ).Trim();
+                prefabName = prefabName.Substring(0,prefabName.Length - "(Clone)".Length).Trim();
             }
 
             AnimalRespawnTimeSettings s = AnimalRespawnTimeSettings.Instance;

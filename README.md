@@ -1,10 +1,12 @@
 # Animal Respawn Time Mod
-This mod makes animals' respawn time in hours adjustable in a Json file.  
+This mod makes animals' respawn times in days adjustable through ModSettings.  
 # Description
-After you first load the game up with this mod, a Json file will be generated in your Mods folder. Close your game, and adjust the values in your Json file to your liking.  
+You can also open the json which this mod creates in the Mods folder, where you can set values which exceed the ModSettings limits.  
+I originally made this mod, to set the respawn times really high, so there is need to hunt in other regions.  
+I dont know the exact vanilla values specific to the difficulty settings, so be aware: this mod overrides all of them (except the cougar) to the mod's set values.  
 # Installation 
 Download and place the dll file into your \Mods folder.  
-After first load, edit the Json in the Mods folder. Reload the game and have fun!  
+Customize the values in the ModSettings menu or in the Json file (Mods folder).
 # Thank you for downloading!
 Mod for The Long Dark game created by Hinterland Studios  
 Modtemplate by Digitalzombie  

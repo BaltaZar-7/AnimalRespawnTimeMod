@@ -85,11 +85,11 @@ namespace AnimalRespawnTimeMod
             float vanillaHours = __result;
             float vanillaDays = vanillaHours / 24f;
             float customDays = customHours / 24f;
-
+#if DEBUG
             MelonLogger.Msg(
                 $"[Respawn] {prefabName} vanilla={vanillaDays:0.##} days -> mod={customDays:0.##} days"
             );
-
+#endif
 
             __result = customHours;
         }

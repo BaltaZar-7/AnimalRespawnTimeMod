@@ -2,22 +2,17 @@
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
-using ModSettings;
 using System;
-using System.Collections.Generic;
-using UnityEngine;
 
 namespace AnimalRespawnTimeMod
 {
     public class AnimalRespawnTimeModMain : MelonMod
     {
-        public override void OnApplicationStart()
+        public override void OnInitializeMelon()
         {
-            MelonLogger.Msg("AnimalRespawnTimeTweaks initializing...");
-
+            MelonLogger.Msg("AnimalRespawnTimeMod initializing...");
             AnimalRespawnTimeSettings.OnLoad();
-
-            MelonLogger.Msg("AnimalRespawnTimeTweaks ready");
+            MelonLogger.Msg("AnimalRespawnTimeMod ready");
         }
 
         public static bool TryGetConfiguredHours(string prefabName, out float hours)
@@ -57,11 +52,35 @@ namespace AnimalRespawnTimeMod
             return true;
         }
     }
+    // With EAF installed, this is needed too to work
+    [HarmonyPatch(typeof(SpawnRegion), nameof(SpawnRegion.Start))]
+    public static class SpawnRegion_Start_Patch
+    {
+        public static void Postfix(SpawnRegion __instance)
+        {
+            if (__instance == null)
+                return;
+
+            string prefab = __instance.GetSpawnablePrefabName();
+
+            float customHours;
+            if (!AnimalRespawnTimeModMain.TryGetConfiguredHours(prefab, out customHours))
+                return;
+
+            float vanillaDays = __instance.m_NumHoursBetweenRespawns / 24f;
+
+            __instance.m_NumHoursBetweenRespawns = customHours;
+
+            /*MelonLogger.Msg(
+                $"[Respawn] {prefab}: {vanillaDays:0.##} -> {customHours / 24f:0.##} days"
+            );*/
+        }
+    }
 
     [HarmonyPatch(typeof(SpawnRegion), nameof(SpawnRegion.GetNumHoursBetweenRespawns))]
     public static class SpawnRegion_GetNumHoursBetweenRespawns_Patch
     {
-        static void Postfix(SpawnRegion __instance, ref float __result)
+        public static void Postfix(SpawnRegion __instance, ref float __result)
         {
             if (__instance == null)
                 return;
@@ -85,17 +104,16 @@ namespace AnimalRespawnTimeMod
             float vanillaHours = __result;
             float vanillaDays = vanillaHours / 24f;
             float customDays = customHours / 24f;
-#if DEBUG
-            MelonLogger.Msg(
+
+            /*MelonLogger.Msg(
                 $"[Respawn] {prefabName} vanilla={vanillaDays:0.##} days -> mod={customDays:0.##} days"
-            );
-#endif
+            );*/
 
             __result = customHours;
         }
     }
 
-    [HarmonyPatch(typeof(SpawnRegion), nameof(SpawnRegion.SetRespawnCooldownTimer))]
+    /**[HarmonyPatch(typeof(SpawnRegion), nameof(SpawnRegion.SetRespawnCooldownTimer))]
     public static class SpawnRegion_SetRespawnCooldownTimer_Patch
     {
         static void Prefix(SpawnRegion __instance, ref float cooldownHours)
@@ -118,7 +136,6 @@ namespace AnimalRespawnTimeMod
             if (!AnimalRespawnTimeModMain.TryGetConfiguredHours(prefabName, out customHours))
                 return;
 
-#if DEBUG
             float vanillaDays = cooldownHours / 24f;
             float customDays = customHours / 24f;
 
@@ -126,10 +143,8 @@ namespace AnimalRespawnTimeMod
                 $"[Respawn] cooldown {prefabName}: {vanillaDays:0.##} days -> {customDays:0.##} days"
             );
 
-#endif
-
             cooldownHours = customHours;
             __instance.m_CooldownTimerHours = customHours;
         }
-    }
+    }**/
 }

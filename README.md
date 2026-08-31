@@ -12,6 +12,7 @@ v1.1.0 produces a new Json file, you can delete the old AnimalRespawnTimeTweaks 
 # Thank you for downloading!
 Mod for The Long Dark game created by Hinterland Studios  
 Modtemplate by Digitalzombie  
+Assistance from LLM was utilized in the development of this code.  
 Made by BaltaZar  
 If you want to generously support me financially, here is where you can. Thank you very much!  
 https://www.patreon.com/c/baltazar777/membership  

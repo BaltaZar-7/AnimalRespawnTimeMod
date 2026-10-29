@@ -1,7 +1,7 @@
 # Animal Respawn Time Mod
 This mod makes animals' respawn times in days adjustable through ModSettings.  
 # Description
-You can also open the json which this mod creates in the Mods folder, where you can set values which exceed the ModSettings limits.  
+This mod overwrite respawn times ON ANIMAL DEATH. So if you kill one with long respawn time set, then change it to a shorter time, the animal will respawn with the time set in the time of the death (not the one changed after).  
 I originally made this mod, to set the respawn times really high, so there is need to hunt in other regions.  
 I dont know the exact vanilla values specific to the difficulty settings, so be aware: this mod overrides all of them (except the cougar) to the mod's set values.  
 # Installation 

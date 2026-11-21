@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
@@ -13,7 +13,7 @@ namespace AnimalRespawnTimeMod
         {
             AnimalRespawnTimeSettings.OnLoad();
             DebugHelper.Init();
-            //EAFCompat.TryPatch(this.HarmonyInstance);
+            EAFCompat.TryPatch(this.HarmonyInstance);
             MelonLogger.Msg("[AnimalRespawnTimeMod] Initialized!");
         }
 
@@ -85,7 +85,6 @@ namespace AnimalRespawnTimeMod
                 DebugHelper.Log("[AnimalRespawnTimeMod] Failed to identify removed animal: " + ex);
             }
         }
-
         public static void Postfix(string __state)
         {
             // Set back the previously used context, if there are any
@@ -94,7 +93,7 @@ namespace AnimalRespawnTimeMod
     }
 
     // Completely override the vanilla respawn interval during removal.
-    [HarmonyPatch(typeof(SpawnRegion),nameof(SpawnRegion.GetNumHoursBetweenRespawns))]
+    [HarmonyPatch(typeof(SpawnRegion), nameof(SpawnRegion.GetNumHoursBetweenRespawns))]
     public static class SpawnRegion_GetNumHoursBetweenRespawns_Patch
     {
         public static void Postfix(ref float __result)
@@ -120,54 +119,12 @@ namespace AnimalRespawnTimeMod
             DebugHelper.Log("[AnimalRespawnTimeMod] Respawn interval overridden for " + prefabName + ": " + customHours + " hours.");
         }
     }
-
-    // ============================================================
-    // OLD VANILLA
-    //
-    // A single Postfix is enough: SpawnRegion.RemoveFromSpawnRegion (native)
-    // internally calls GetNumHoursBetweenRespawns() to compute
-    // m_ElapasedHoursNextRespawnAllowed, and m_NumHoursBetweenRespawns /
-    // m_ElapasedHoursNextRespawnAllowed / m_NumRespawnsPending are all
-    // regular Il2Cpp instance fields, natively serialized by
-    // SpawnRegion.Serialize()/Deserialize() - no ModData needed.
-    // ============================================================
-    /*[HarmonyPatch(typeof(SpawnRegion), nameof(SpawnRegion.GetNumHoursBetweenRespawns))]
-    public static class SpawnRegion_GetNumHoursBetweenRespawns_Patch
-    {
-        public static void Postfix(SpawnRegion __instance, ref float __result)
-        {
-            if (__instance == null)
-                return;
-            string prefabName;
-            try
-            {
-                prefabName = __instance.GetSpawnablePrefabName();
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error("[AnimalRespawnTimeMod] Vanilla GetNumHoursBetweenRespawns failed: " + ex);
-                return;
-            }
-            float customHours;
-            if (!AnimalRespawnTimeModMain.TryGetConfiguredHours(prefabName, out customHours))
-                return;
-            __result = customHours;
-        }
-    }
-
-    // ============================================================
-    // OLD EAF COMPATIBILITY
-    //
-    // Same principle: CustomSpawnRegion.RemoveFromSpawnRegion internally
-    // calls its own private GetNumHoursBetweenRespawns(), which our Postfix
-    // also intercepts - so patching that one method is sufficient. EAF
-    // owns persistence via its SpawnRegionModDataProxy (m_NumRespawnsPending,
-    // m_ElapasedHoursNextRespawnAllowed), which is correct now that
-    // SpawnModDataProxy.Disconnected is no longer excluded from
-    // serialization (upstream EAF fix).
-    // ============================================================
     internal static class EAFCompat
     {
+        private static PropertyInfo s_VanillaSpawnRegionProperty;
+        private static readonly Dictionary<int, string> s_LastKilledPrefabByRegion = new Dictionary<int, string>();
+        private static readonly Dictionary<int, string> s_FirstEntryPrefabByRegion = new Dictionary<int, string>();
+
         public static bool IsActive { get; private set; }
 
         public static void TryPatch(HarmonyLib.Harmony harmony)
@@ -181,20 +138,26 @@ namespace AnimalRespawnTimeMod
                     MelonLogger.Msg("[AnimalRespawnTimeMod] EAF not detected. Using vanilla respawn handling.");
                     return;
                 }
-                DebugHelper.Log("[AnimalRespawnTimeMod] EAF detected. Patching EAF cooldown calculation.");
 
-                MethodInfo getRespawnHoursMethod = AccessTools.Method(customSpawnRegionType, "GetNumHoursBetweenRespawns");
-                if (getRespawnHoursMethod == null)
+                s_VanillaSpawnRegionProperty = AccessTools.Property(customSpawnRegionType, "VanillaSpawnRegion");
+                MethodInfo removeMethod = AccessTools.Method(customSpawnRegionType, "RemoveFromSpawnRegion", new Type[] { typeof(BaseAi) });
+                MethodInfo getHoursMethod = AccessTools.Method(customSpawnRegionType, "GetNumHoursBetweenRespawns");
+                if (s_VanillaSpawnRegionProperty == null || removeMethod == null || getHoursMethod == null)
                 {
-                    MelonLogger.Error("[AnimalRespawnTimeMod] EAF: GetNumHoursBetweenRespawns not found!");
+                    MelonLogger.Error("[AnimalRespawnTimeMod] EAF detected, but VanillaSpawnRegion / RemoveFromSpawnRegion / GetNumHoursBetweenRespawns was not found - did the EAF API change?");
                     return;
                 }
+
                 harmony.Patch(
-                    getRespawnHoursMethod,
+                    removeMethod,
+                    prefix: new HarmonyMethod(typeof(EAFCompat), nameof(RemoveFromSpawnRegionPrefix)),
+                    finalizer: new HarmonyMethod(typeof(EAFCompat), nameof(RemoveFromSpawnRegionFinalizer)));
+                harmony.Patch(
+                    getHoursMethod,
                     postfix: new HarmonyMethod(typeof(EAFCompat), nameof(GetNumHoursBetweenRespawnsPostfix)));
 
                 IsActive = true;
-                MelonLogger.Msg("[AnimalRespawnTimeMod] EAF compatibility installed. EAF owns the cooldown and ModData persistence.");
+                MelonLogger.Msg("[AnimalRespawnTimeMod] EAF compatibility installed.");
             }
             catch (Exception ex)
             {
@@ -203,28 +166,93 @@ namespace AnimalRespawnTimeMod
             }
         }
 
-        public static void GetNumHoursBetweenRespawnsPostfix(object __instance, ref float __result)
+        // Runs right before EAF removes the animal and computes the cooldown.
+        public static void RemoveFromSpawnRegionPrefix(object __instance, BaseAi __0, out string __state)
         {
-            if (__instance == null)
+            __state = RespawnPatchContext.CurrentPrefabName;
+            RespawnPatchContext.CurrentPrefabName = null;
+            if (__0 == null)
                 return;
             try
             {
-                PropertyInfo vanillaProperty = AccessTools.Property(__instance.GetType(), "VanillaSpawnRegion");
-                if (vanillaProperty == null)
+                string instanceName = __0.name;
+                if (string.IsNullOrEmpty(instanceName))
                     return;
-                SpawnRegion region = vanillaProperty.GetValue(__instance) as SpawnRegion;
-                if (region == null)
+                string prefabName = SpawnRegion.GetPrefabNameFromInstanceName(instanceName);
+                RespawnPatchContext.CurrentPrefabName = prefabName;
+
+                SpawnRegion region = GetVanillaRegion(__instance);
+                if (region != null && !string.IsNullOrEmpty(prefabName))
+                    s_LastKilledPrefabByRegion[region.GetInstanceID()] = prefabName;
+            }
+            catch (Exception ex)
+            {
+                DebugHelper.Log("[AnimalRespawnTimeMod] [EAF] Failed to identify removed animal: " + ex);
+            }
+        }
+        // Finalizer (not Postfix) so the context is restored even if EAF's method throws.
+        public static Exception RemoveFromSpawnRegionFinalizer(string __state, Exception __exception)
+        {
+            RespawnPatchContext.CurrentPrefabName = __state;
+            return __exception;
+        }
+
+        public static void GetNumHoursBetweenRespawnsPostfix(object __instance, ref float __result)
+        {
+            try
+            {
+                string prefabName = RespawnPatchContext.CurrentPrefabName;
+                if (string.IsNullOrEmpty(prefabName))
+                    prefabName = ResolveRegionPrefabName(GetVanillaRegion(__instance));
+                if (string.IsNullOrEmpty(prefabName))
                     return;
-                string prefabName = region.GetSpawnablePrefabName();
+
                 float customHours;
                 if (!AnimalRespawnTimeModMain.TryGetConfiguredHours(prefabName, out customHours))
+                {
+                    DebugHelper.Log("[AnimalRespawnTimeMod] [EAF] No custom respawn interval for: " + prefabName);
                     return;
+                }
                 __result = customHours;
+                DebugHelper.Log("[AnimalRespawnTimeMod] [EAF] Respawn interval overridden for " + prefabName + ": " + customHours + " hours.");
             }
             catch (Exception ex)
             {
                 MelonLogger.Error("[AnimalRespawnTimeMod] [EAF] GetNumHoursBetweenRespawnsPostfix failed: " + ex);
             }
         }
-    }*/
+
+        // Fallback when there is no kill context: last killed species of this region,
+        // otherwise the first spawn list entry (same source EAF itself uses for its prefab name).
+        private static string ResolveRegionPrefabName(SpawnRegion region)
+        {
+            if (region == null)
+                return null;
+            int key = region.GetInstanceID();
+            string prefabName;
+            if (s_LastKilledPrefabByRegion.TryGetValue(key, out prefabName))
+                return prefabName;
+            if (s_FirstEntryPrefabByRegion.TryGetValue(key, out prefabName))
+                return prefabName;
+
+            Il2CppSystem.Collections.Generic.List<SpawnRegion.SpawnListEntry> spawnList = region.m_SpawnList;
+            if (spawnList == null || spawnList.Count == 0)
+                return null;
+            AssetReferenceBaseAi reference = spawnList[0].GetAnimalForMode(region.m_WildlifeMode);
+            if (reference == null)
+                return null;
+            BaseAi prefabAi = reference.GetOrLoadTypedAsset();
+            if (prefabAi == null)
+                return null;
+            prefabName = prefabAi.gameObject.name;
+            s_FirstEntryPrefabByRegion[key] = prefabName;
+            return prefabName;
+        }
+        private static SpawnRegion GetVanillaRegion(object instance)
+        {
+            if (instance == null || s_VanillaSpawnRegionProperty == null)
+                return null;
+            return s_VanillaSpawnRegionProperty.GetValue(instance) as SpawnRegion;
+        }
+    }
 }

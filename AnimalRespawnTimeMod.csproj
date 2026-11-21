@@ -92,6 +92,9 @@
         <Reference Include="ModSettings">
           <HintPath>G:\SteamLibrary\steamapps\common\TheLongDark\Mods\ModSettings.dll</HintPath>
         </Reference>
+        <Reference Include="Unity.Addressables">
+          <HintPath>G:\SteamLibrary\steamapps\common\TheLongDark\MelonLoader\Il2CppAssemblies\Unity.Addressables.dll</HintPath>
+        </Reference>
         <Reference Include="Unity.Mathematics" />
         <Reference Include="Unity.TextMeshPro" />
         <Reference Include="UnityEngine.AssetBundleModule" />
